@@ -1,0 +1,206 @@
+---
+title: "Prediction Assignment - Practical Machine Learning"
+author: "Pragya Kalia"
+date: "11/19/2017"
+output: html_document
+---
+This document is part of an assignemnt from Coursera's course on Practical Machine Learning module of Data Science Specialization. This is built up in RStudio using the knitr functions & is meant to be published in HTML format. 
+
+#(A) Background & Introduction-
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ?V a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+#(B) Objective-
+The goal of this project is to predict the manner in which the subjects did the exercise. This is the "classe" variable in the training set. We are free to use any of the other variables to predict with. The machine algorithm explained here is applied to the 20 test cases vaialble in the test data and the predictions are submitted in appropriate expected format.
+
+#(C) Data Description : Loading & Exploring-
+
+The training data for this project are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+##Credits : 
+The data for this project come from this source: <http://groupware.les.inf.puc-rio.br/har>. 
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012.  
+
+My sincere thanks to the above mentioned authors for being so generous in allowing their data to be used for this kind of assignment.
+
+A short description of the datasets content from the authors?? website:
+
+??Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg)."
+
+#D) Packages, Data Loading & Cleaning-
+We first upload required packages & libraries for the anaysis
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Relevant Packages upload, message=FALSE, warning=FALSE}
+list = ls()
+setwd("~/Documents/PracticalMachineLearning")
+library(knitr)
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+library(rattle.data)
+library(corrplot)
+set.seed(12345)
+```
+
+```{r Data upload & Cleaning}
+
+URLTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URLTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# download
+training <- read.csv(url(URLTrain))
+testing <- read.csv(url(URLTest))
+
+# createDataPartition
+inTrain <- createDataPartition(training$classe, p=0.7, list = FALSE)
+TrngSet <- training[inTrain, ]
+TestSet <- training[-inTrain, ]
+dim(TrngSet)
+```
+
+```{r}
+dim(TestSet)
+```
+
+```{r Cleaning Data}
+#remove variables with Nearly Zero Variance
+nzv <- nearZeroVar(TrngSet)
+TrngSet <- TrngSet[, -nzv]
+TestSet <- TestSet[, -nzv]
+dim(TrngSet)
+```
+
+```{r}
+dim(TestSet)
+```
+
+```{r}
+# remove variables with mostly NAs
+allNA <- sapply(TrngSet, function(x) mean(is.na(x))) > 0.95
+TrngSet <- TrngSet[, allNA == FALSE]
+TestSet <- TestSet[, allNA == FALSE]
+dim(TrngSet)
+```
+
+```{r}
+dim(TestSet)
+```
+
+```{r}
+#remove variable with only identification
+TrngSet <- TrngSet[, -(1:5)]
+TestSet <- TestSet[, -(1:5)]
+dim(TrngSet)
+```
+
+```{r}
+dim(TestSet)
+# Only 54 variables left post data cleaning
+```
+
+#(E) Correlation Analysis-
+```{r}
+corMat <- cor(TrngSet[, -54])
+corrplot(corMat, order = "FPC", method = "color", type = "lower", tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+# Highly correlated variables shown in dark colours in the graph
+```
+
+```{r}
+library(randomForest)
+set.seed(12345)
+fitMod<- randomForest(classe~. , data = TrngSet, importance = TRUE, ntree = 100)
+varImpPlot(fitMod)
+```
+
+#(F) Prediction Models-
+Random Forests(RF), Generalized Boosted Model(GBM) & Decicion Tree models will be used to model the regression in the Training data. Method with the highest accuracy will be then used for quiz  predictions. At the end of each analysis, Confusion Matrix is plotted for better comprehension & visualization purpose.
+
+### (i) RF Method
+```{r}
+set.seed(12345)
+ConRF <- trainControl(method = "cv", number = 3, verboseIter = FALSE)
+modelfitRF <- train(classe ~., data = TrngSet, method = "rf", trControl = ConRF)
+modelfitRF$finalModel
+```
+
+```{r}
+# Prediction (Test Data Set)
+PreRF <- predict(modelfitRF, newdata = TestSet)
+ConMatRF <- confusionMatrix(PreRF, TestSet$classe)
+ConMatRF
+```
+
+```{r}
+# Plotting results
+plot(ConMatRF$table, col = ConMatRF$byClass, main = paste("RANDOM FOREST METHOD : ACCURACY =", round(ConMatRF$overall['Accuracy'], 4)))
+```
+
+### (ii) Generalized Boosted Model (GBM)
+```{r}
+set.seed(12345)
+ConGBM <- trainControl(method = "repeatedcv", number = 5, repeats =1)
+modelfitGBM <- train(classe ~., data = TrngSet, method = "gbm", trControl = ConGBM, verbose = FALSE)
+modelfitGBM$finalModel
+```
+##### A gradient boosted model with multinomial loss function.150 iterations were performed.There were 53 predictors of which 41 had non-zero influence.
+
+```{r}
+#Prediction (Test Data Set)
+PreGBM <- predict(modelfitGBM, newdata = TestSet)
+ConMatGBM <- confusionMatrix(PreGBM, TestSet$classe)
+ConMatGBM
+```
+
+```{r}
+# Plotting results
+plot(ConMatGBM$table, col = ConMatGBM$byClass, main = paste("GBM METHOD : ACCURACY =", round(ConMatGBM$overall['Accuracy'], 4)))
+```
+
+### (iii) Decision Tree Model(DT)
+```{r}
+set.seed(12345)
+modelfitDT <- rpart(classe ~., data = TrngSet, method = "class")
+rpart.plot(modelfitDT)
+```
+
+```{r}
+#Prediction (Test Data Set)
+PreDT <- predict(modelfitDT, newdata = TestSet, type = "class")
+ConMatDT <- confusionMatrix(PreDT, TestSet$classe)
+ConMatDT
+```
+
+```{r}
+# Plotting results
+plot(ConMatDT$table, col = ConMatDT$byClass, main = paste("DECISION TREE METHOD : ACCURACY =", round(ConMatDT$overall['Accuracy'], 4)))
+```
+
+# (G) Choosen Model's application on the Test Data- 
+Given below are the accuracy of the three regression models: 
+1. RF: 0.9968 
+2. GBM: 0.9857 
+3. Decision Tree: 0.7368
+Since RF has the best accuracy, RF model will be applied to predict the 20 quiz results.
+
+```{r}
+PreTest <- predict(modelfitRF, newdata = testing)
+PreTest
+```
+
+#(H) Conclusion- 
+Using RF method with 99.68% accuracy (0.23% of out of sample error), we can comfortably conclude that we could accurately predict the classification of 20 observations. 
